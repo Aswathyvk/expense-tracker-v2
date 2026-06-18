@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Expense Tracker</title>
+<style>
+  :root{--bg:#0f1115;--card:#171a21;--border:#2a2e38;--text:#e6e8ec;--muted:#9aa1ab;--accent:#5b8def;--danger:#e25555;}
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);}
+  .wrap{max-width:980px;margin:0 auto;padding:24px 16px 60px;}
+  h1{font-size:22px;margin:0 0 4px;}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:24px;}
+  .conn{font-size:12px;padding:3px 9px;border-radius:999px;display:inline-block;margin-left:8px;vertical-align:middle;}
+  .conn-ok{background:#1f3d2b;color:#5cd685;}
+  .conn-bad{background:#3d1f1f;color:#e88;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:20px;}
+  .card h2{font-size:15px;margin:0 0 14px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;}
+  label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px;}
+  input,select,textarea{width:100%;padding:8px 10px;background:#0f1115;border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;}
+  textarea{resize:vertical;min-height:38px;}
+  button{cursor:pointer;border:none;border-radius:6px;padding:9px 16px;font-size:14px;font-weight:600;}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-danger{background:transparent;color:var(--danger);border:1px solid var(--danger);}
+  .btn-ghost{background:transparent;color:var(--text);border:1px solid var(--border);}
+  .actions{margin-top:14px;display:flex;gap:8px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{padding:8px 6px;text-align:left;border-bottom:1px solid var(--border);}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;}
+  tr:hover{background:#1c1f28;}
+  .amt{font-weight:600;}
+  .badge{font-size:11px;padding:2px 8px;border-radius:999px;background:#23283450;color:var(--accent);}
+  .empty{color:var(--muted);text-align:center;padding:30px;font-size:14px;}
+  .err{color:var(--danger);font-size:13px;margin-top:8px;display:none;}
+  .row-actions button{padding:4px 8px;font-size:12px;margin-right:4px;}
+  .summary-total{font-size:26px;font-weight:700;}
+  .summary-cats{margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;}
+  .summary-cat{background:#0f1115;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;}
+  .filters-actions{margin-top:10px;display:flex;gap:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Expense Tracker <span id="conn-badge" class="conn">checking backend...</span></h1>
+  <div class="sub">Standalone frontend — talks to the FastAPI backend at <code id="api-base-label"></code></div>
+
+  <div class="card">
+    <h2 id="form-title">Add Expense</h2>
+    <input type="hidden" id="edit-id">
+    <div class="grid">
+      <div>
+        <label>Title</label>
+        <input id="f-title" placeholder="Coffee at Starbucks">
+      </div>
+      <div>
+        <label>Amount</label>
+        <input id="f-amount" type="number" step="0.01" placeholder="0.00">
+      </div>
+      <div>
+        <label>Category</label>
+        <select id="f-category"></select>
+      </div>
+      <div>
+        <label>Date</label>
+        <input id="f-date" type="date">
+      </div>
+    </div>
+    <div style="margin-top:10px;">
+      <label>Note (optional)</label>
+      <textarea id="f-note" placeholder="Optional details"></textarea>
+    </div>
+    <div class="err" id="form-err"></div>
+    <div class="actions">
+      <button class="btn-primary" id="save-btn" onclick="saveExpense()">Add Expense</button>
+      <button class="btn-ghost" id="cancel-btn" style="display:none" onclick="cancelEdit()">Cancel</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Monthly Summary</h2>
+    <div class="grid" style="margin-bottom:12px;">
+      <div>
+        <label>Month</label>
+        <input id="sum-month" type="month">
+      </div>
+    </div>
+    <div class="summary-total" id="sum-total">₹0.00</div>
+    <div class="summary-cats" id="sum-cats"></div>
+  </div>
+
+  <div class="card">
+    <h2>Filters</h2>
+    <div class="grid">
+      <div>
+        <label>Category</label>
+        <select id="flt-category"><option value="">All</option></select>
+      </div>
+      <div>
+        <label>From</label>
+        <input id="flt-from" type="date">
+      </div>
+      <div>
+        <label>To</label>
+        <input id="flt-to" type="date">
+      </div>
+      <div>
+        <label>Title contains</label>
+        <input id="flt-title" placeholder="search...">
+      </div>
+    </div>
+    <div class="filters-actions">
+      <button class="btn-primary" onclick="loadExpenses()">Apply</button>
+      <button class="btn-ghost" onclick="clearFilters()">Clear</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Expenses</h2>
+    <div id="list-wrap"></div>
+  </div>
+</div>
+
+<script>
+// Frontend is fully decoupled from the backend process — this is the only
+// place the backend location is configured. Change this if you run the API
+// on a different host/port.
+const API_BASE = "http://127.0.0.1:8000/api";
+
+let CATEGORIES = [];
+
+document.getElementById('api-base-label').textContent = API_BASE;
+
+function todayLocal(){
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function thisMonthLocal(){
+  return todayLocal().slice(0,7);
+}
+
+function setConnBadge(ok){
+  const b = document.getElementById('conn-badge');
+  b.textContent = ok ? 'backend connected' : 'backend unreachable';
+  b.className = 'conn ' + (ok ? 'conn-ok' : 'conn-bad');
+}
+
+async function init(){
+  try{
+    const healthRes = await fetch(API_BASE + '/health');
+    setConnBadge(healthRes.ok);
+  } catch(e){
+    setConnBadge(false);
+  }
+
+  try{
+    CATEGORIES = await (await fetch(API_BASE + '/categories')).json();
+  } catch(e){
+    CATEGORIES = ["Food","Transport","Shopping","Bills","Entertainment","Other"];
+  }
+  fillCategorySelects();
+
+  document.getElementById('f-date').value = todayLocal();
+  document.getElementById('sum-month').value = thisMonthLocal();
+  await loadExpenses();
+  await loadSummary();
+  document.getElementById('sum-month').addEventListener('change', loadSummary);
+}
+
+function fillCategorySelects(){
+  const fSel = document.getElementById('f-category');
+  const fltSel = document.getElementById('flt-category');
+  CATEGORIES.forEach(c=>{
+    fSel.innerHTML += `<option value="${c}">${c}</option>`;
+    fltSel.innerHTML += `<option value="${c}">${c}</option>`;
+  });
+}
+
+function showErr(msg){
+  const e = document.getElementById('form-err');
+  e.textContent = msg;
+  e.style.display = msg ? 'block' : 'none';
+}
+
+async function saveExpense(){
+  showErr('');
+  const saveBtn = document.getElementById('save-btn');
+  saveBtn.disabled = true;
+  try{
+    const id = document.getElementById('edit-id').value;
+    const payload = {
+      title: document.getElementById('f-title').value,
+      amount: parseFloat(document.getElementById('f-amount').value),
+      category: document.getElementById('f-category').value,
+      date: document.getElementById('f-date').value,
+      note: document.getElementById('f-note').value
+    };
+    if(!payload.title || !payload.title.trim()){ showErr('Title is required.'); return; }
+    if(isNaN(payload.amount) || payload.amount <= 0){ showErr('Amount must be a positive number.'); return; }
+
+    const url = id ? `${API_BASE}/expenses/${id}` : `${API_BASE}/expenses`;
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    if(!res.ok){
+      const err = await res.json().catch(()=>({detail:'Failed to save'}));
+      const msg = Array.isArray(err.detail) ? err.detail.map(d=>d.msg).join(' ') : (err.detail || 'Invalid input.');
+      showErr(msg);
+      return;
+    }
+    resetForm();
+    await loadExpenses();
+    await loadSummary();
+  } catch(e){
+    showErr('Could not reach the backend. Is it running on ' + API_BASE + '?');
+  } finally {
+    saveBtn.disabled = false;
+  }
+}
+
+function resetForm(){
+  document.getElementById('edit-id').value = '';
+  document.getElementById('f-title').value = '';
+  document.getElementById('f-amount').value = '';
+  document.getElementById('f-category').selectedIndex = 0;
+  document.getElementById('f-date').value = todayLocal();
+  document.getElementById('f-note').value = '';
+  document.getElementById('form-title').textContent = 'Add Expense';
+  document.getElementById('save-btn').textContent = 'Add Expense';
+  document.getElementById('cancel-btn').style.display = 'none';
+  showErr('');
+}
+
+function cancelEdit(){ resetForm(); }
+
+async function editExpense(id){
+  let exp;
+  try{
+    const res = await fetch(`${API_BASE}/expenses/${id}`);
+    if(!res.ok){ alert('Could not load that expense — it may have been deleted.'); await loadExpenses(); return; }
+    exp = await res.json();
+  } catch(e){
+    alert('Could not reach the backend. Is it running on ' + API_BASE + '?');
+    return;
+  }
+  document.getElementById('edit-id').value = exp.id;
+  document.getElementById('f-title').value = exp.title;
+  document.getElementById('f-amount').value = exp.amount;
+  document.getElementById('f-category').value = exp.category;
+  document.getElementById('f-date').value = exp.date;
+  document.getElementById('f-note').value = exp.note || '';
+  document.getElementById('form-title').textContent = 'Edit Expense';
+  document.getElementById('save-btn').textContent = 'Save Changes';
+  document.getElementById('cancel-btn').style.display = 'inline-block';
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+async function deleteExpense(id){
+  if(!confirm('Delete this expense?')) return;
+  try{
+    const res = await fetch(`${API_BASE}/expenses/${id}`, {method:'DELETE'});
+    if(!res.ok){ alert('Could not delete — it may already be gone.'); }
+    await loadExpenses();
+    await loadSummary();
+  } catch(e){
+    alert('Could not reach the backend. Is it running on ' + API_BASE + '?');
+  }
+}
+
+function clearFilters(){
+  document.getElementById('flt-category').value = '';
+  document.getElementById('flt-from').value = '';
+  document.getElementById('flt-to').value = '';
+  document.getElementById('flt-title').value = '';
+  loadExpenses();
+}
+
+async function loadExpenses(){
+  const params = new URLSearchParams();
+  const cat = document.getElementById('flt-category').value;
+  const from = document.getElementById('flt-from').value;
+  const to = document.getElementById('flt-to').value;
+  const title = document.getElementById('flt-title').value;
+  if(cat) params.set('category', cat);
+  if(from) params.set('date_from', from);
+  if(to) params.set('date_to', to);
+  if(title) params.set('title', title);
+
+  try{
+    const res = await fetch(`${API_BASE}/expenses?` + params.toString());
+    setConnBadge(true);
+    if(!res.ok){ document.getElementById('list-wrap').innerHTML = '<div class="empty">Could not load expenses. Check filters and try again.</div>'; return; }
+    const rows = await res.json();
+    renderList(rows);
+  } catch(e){
+    setConnBadge(false);
+    document.getElementById('list-wrap').innerHTML = '<div class="empty">Could not reach the backend. Is it running on ' + API_BASE + '?</div>';
+  }
+}
+
+function renderList(rows){
+  const wrap = document.getElementById('list-wrap');
+  if(rows.length === 0){
+    wrap.innerHTML = '<div class="empty">No expenses found. Add one above, or adjust your filters.</div>';
+    return;
+  }
+  let html = '<table><thead><tr><th>Date</th><th>Title</th><th>Category</th><th>Amount</th><th>Note</th><th></th></tr></thead><tbody>';
+  for(const r of rows){
+    html += `<tr>
+      <td>${r.date}</td>
+      <td>${escapeHtml(r.title)}</td>
+      <td><span class="badge">${r.category}</span></td>
+      <td class="amt">₹${r.amount.toFixed(2)}</td>
+      <td>${escapeHtml(r.note || '')}</td>
+      <td class="row-actions">
+        <button class="btn-ghost" onclick="editExpense(${r.id})">Edit</button>
+        <button class="btn-danger" onclick="deleteExpense(${r.id})">Delete</button>
+      </td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+async function loadSummary(){
+  const month = document.getElementById('sum-month').value;
+  try{
+    const res = await fetch(`${API_BASE}/summary?month=` + month);
+    if(!res.ok){ document.getElementById('sum-cats').innerHTML = '<div class="empty" style="padding:10px 0;">Could not load summary.</div>'; return; }
+    const data = await res.json();
+    document.getElementById('sum-total').textContent = '₹' + data.total.toFixed(2);
+    const catsDiv = document.getElementById('sum-cats');
+    const entries = Object.entries(data.breakdown);
+    if(entries.length === 0){
+      catsDiv.innerHTML = '<div class="empty" style="padding:10px 0;">No expenses this month.</div>';
+      return;
+    }
+    catsDiv.innerHTML = entries.map(([cat, amt]) =>
+      `<div class="summary-cat">${cat}: ₹${amt.toFixed(2)}</div>`
+    ).join('');
+  } catch(e){
+    document.getElementById('sum-cats').innerHTML = '<div class="empty" style="padding:10px 0;">Could not reach the backend.</div>';
+  }
+}
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+init();
+</script>
+</body>
+</html>
