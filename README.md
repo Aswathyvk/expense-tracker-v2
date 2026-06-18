@@ -1,49 +1,367 @@
-Expense Tracker
-Personal expense tracker. Single user, runs locally, no deployment. Frontend and backend are two fully independent pieces — separate folders, separate processes, communicating only over HTTP.
+# 💰 Expense Tracker
 
-Stack & why
-Backend: Python + FastAPI (backend/main.py), one file. SQLite via the stdlib sqlite3 module, no ORM — one table, no relations, so an ORM is pure overhead. Pydantic gives request validation for free; FastAPI gives interactive docs at /docs for free.
-Frontend: A single static HTML file (frontend/index.html), vanilla JS, inline CSS. No build step, no framework, no bundler. It is not served by the backend — open the file directly in a browser (file:// URL) and it talks to the backend purely over fetch().
-Why split them: the brief allows "any frontend or plain HTML/JS" and doesn't require them to be one process. Keeping them separate processes forces an explicit, inspectable contract (HTTP + CORS) between the two instead of folding the UI into the API server. Cost: CORS has to be configured (see tradeoffs below). Worth it for a clean separation of concerns at basically zero extra effort.
-How to run
-1. Backend (Python 3.9+):
+A simple, fast, single-user expense tracking application built as a small full-stack web app.
 
+The application allows users to record daily expenses, view spending history, edit or delete entries, filter expenses, and view monthly spending summaries.
+
+Designed for local execution with a completely independent frontend and backend communicating exclusively through HTTP.
+
+---
+
+## ✨ Features
+
+### Expense Management
+
+* Add expenses with:
+
+  * Title
+  * Amount
+  * Category
+  * Date
+  * Optional note
+* View all expenses sorted by most recent date
+* Edit existing expenses
+* Delete expenses
+
+### Monthly Summary
+
+* Total amount spent for a selected month
+* Category-wise spending breakdown
+
+### Filtering
+
+Filter expenses using:
+
+* Category
+* Date range (From / To)
+* Title search (partial, case-insensitive)
+
+### User Experience
+
+* Empty-state handling
+* Live backend connectivity status
+* Form validation
+* Duplicate submission prevention
+* Responsive layout
+* Clear error handling
+
+---
+
+## 🏗️ Architecture
+
+The application intentionally keeps the frontend and backend as completely independent components.
+
+```text
+expense-tracker/
+│
+├── backend/
+│   ├── main.py
+│   ├── expenses.db
+│   ├── requirements.txt
+│
+└── frontend/
+    └── index.html
+```
+
+```text
+Browser (Frontend)
+        │
+        │ HTTP (fetch)
+        ▼
+ FastAPI Backend
+        │
+        ▼
+     SQLite
+```
+
+The frontend is not served by the backend and can be opened directly in any browser.
+
+---
+
+## 🛠️ Tech Stack
+
+### Backend
+
+* Python 3.9+
+* FastAPI
+* SQLite
+* Pydantic
+
+### Frontend
+
+* HTML5
+* Vanilla JavaScript
+* Inline CSS
+
+### Why This Stack?
+
+#### FastAPI
+
+* Lightweight and fast
+* Built-in request validation through Pydantic
+* Interactive API documentation at `/docs`
+
+#### SQLite
+
+* Zero configuration
+* Perfect fit for a small local application
+* No external database installation required
+
+#### Vanilla JavaScript
+
+* No build process
+* No framework overhead
+* Faster development within the assessment time limit
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+* Python 3.9+
+* pip
+
+---
+
+## Backend Setup
+
+Navigate to the backend folder:
+
+```bash
 cd backend
+```
+
+Install dependencies:
+
+```bash
 pip install -r requirements.txt
+```
+
+Start the API server:
+
+```bash
 uvicorn main:app --reload --port 8000
-Leave this running. API docs at http://127.0.0.1:8000/docs — useful for poking at endpoints directly.
+```
 
-2. Frontend: Just open frontend/index.html in any browser (double-click it, or File → Open in your browser). No server, no build step. It looks for the backend at http://127.0.0.1:8000/api — that's the only place the backend location is configured (top of the <script> block), change it there if you run the API somewhere else.
+Backend will be available at:
 
-The header shows a live "backend connected / unreachable" badge so it's obvious if the two pieces aren't talking.
+```text
+http://127.0.0.1:8000
+```
 
-What's implemented
-Add expense — title, amount, category (Food / Transport / Shopping / Bills / Entertainment / Other), date (defaults to today — computed in local time, not UTC, so it's correct for IST), optional note.
-List all expenses — sorted by date, most recent first (ties broken by id descending), all fields shown.
-Edit / delete any expense.
-Monthly summary — total spent + breakdown by category, for any month (defaults to current month).
-Filters — by category, date range (from/to), and title (partial, case-insensitive). Filters combine (AND).
-Edge cases handled
-Empty list / empty month → clear empty state, not a blank screen.
-Amount must be a positive number (rejects 0, negative, non-numeric, unreasonably large).
-Title required, rejected if blank/whitespace-only.
-Category restricted to the fixed list, enforced server-side (not just the UI dropdown — the API itself rejects an invalid category).
-Date format validated (YYYY-MM-DD); a missing date silently defaults to today rather than erroring.
-"Weird" date ranges (from after to) don't crash — they return zero results, same as any other filter combo with no matches.
-Editing/deleting a non-existent id returns a clean 404, not a stack trace.
-A literal % or _ typed into the title filter is treated as a literal character, not a SQL wildcard (escaped before the LIKE query).
-Every frontend network call is wrapped in try/catch — if the backend isn't running, the UI says so instead of failing silently or throwing.
-Add/Save button disables while a request is in flight, so a fast double-click can't create a duplicate expense.
-All validation happens server-side (Pydantic), so the API can't be fed bad data even if someone bypasses the HTML form entirely (e.g. via /docs or curl).
-What's skipped (and why)
-Auth / multi-user — explicitly out of scope per the brief.
-Deployment — local only, per the brief.
-Automated test suite — skipped to prioritize the 5 functional requirements within the time box. Instead, every endpoint and validation branch (bad amount, bad category, blank title, bad date, 404s, empty states, LIKE-wildcard escaping) was manually smoke-tested end-to-end before calling it done.
-Multi-currency — brief specifies single local currency, no conversion.
-Pagination — not implemented; expense counts for a personal tracker are small enough to return the full filtered list. Would add if list sizes grew large.
-Known tradeoffs / rough edges
-CORS is wildcard (allow_origins=["*"]) so the frontend works whether it's opened as a local file or served from any port. This is fine for a local single-user tool but is not what you'd ship for a real deployment — there, CORS should be locked to the actual frontend origin.
-Amounts are stored as SQLite REAL (float), not fixed-point. Fine at this scale/volume; a production money system would use integer minor-units or Decimal to avoid float rounding drift over time.
-No confirmation beyond a basic confirm() dialog before delete.
-Currency symbol (₹) is hardcoded in the UI, not configurable.
-No optimistic UI updates — every action re-fetches from the server after the request completes. Simpler, slightly more round-trips; not a problem at this scale.
+Interactive API documentation:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+---
+
+## Frontend Setup
+
+Open the frontend directly in your browser:
+
+```text
+frontend/index.html
+```
+
+No build step.
+
+No npm install.
+
+No frontend server required.
+
+The frontend communicates with:
+
+```text
+http://127.0.0.1:8000/api
+```
+
+If the backend is running elsewhere, update the API URL at the top of the JavaScript section in `index.html`.
+
+---
+
+## 📋 Supported Categories
+
+* Food
+* Transport
+* Shopping
+* Bills
+* Entertainment
+* Other
+
+---
+
+## 📊 Monthly Summary
+
+The application provides:
+
+* Total spending for a selected month
+* Category-wise expense breakdown
+
+Example:
+
+```text
+June 2026
+
+Total Spent: ₹12,450
+
+Food           ₹3,200
+Transport      ₹1,500
+Shopping       ₹4,750
+Bills          ₹2,000
+Entertainment  ₹1,000
+```
+
+---
+
+## 🔍 Filtering
+
+Users can combine multiple filters simultaneously:
+
+| Filter    | Description          |
+| --------- | -------------------- |
+| Category  | Exact category match |
+| Date From | Start date           |
+| Date To   | End date             |
+| Title     | Partial title search |
+
+Filters are combined using logical AND.
+
+---
+
+## ✅ Validation & Edge Cases
+
+### Expense Validation
+
+* Title is required
+* Blank or whitespace-only titles are rejected
+* Amount must be positive
+* Invalid categories are rejected
+* Date format must be valid (`YYYY-MM-DD`)
+
+### Application Behavior
+
+* Empty expense list handled gracefully
+* Empty monthly summaries display meaningful messages
+* Non-existent records return clean 404 responses
+* Backend outages are surfaced in the UI
+* Duplicate submissions prevented while requests are in progress
+* Literal `%` and `_` characters in search terms are safely escaped
+
+---
+
+## 🔗 API Endpoints
+
+| Method | Endpoint             | Description     |
+| ------ | -------------------- | --------------- |
+| GET    | `/api/expenses`      | List expenses   |
+| POST   | `/api/expenses`      | Create expense  |
+| PUT    | `/api/expenses/{id}` | Update expense  |
+| DELETE | `/api/expenses/{id}` | Delete expense  |
+| GET    | `/api/summary`       | Monthly summary |
+
+Interactive documentation:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+---
+
+## ⚖️ Design Decisions & Tradeoffs
+
+### Separate Frontend & Backend
+
+The frontend and backend run independently and communicate only through HTTP.
+
+**Benefits**
+
+* Clear separation of concerns
+* Easier API testing
+* Technology-agnostic architecture
+
+**Tradeoff**
+
+* Requires CORS configuration
+
+---
+
+### SQLite REAL for Amount Storage
+
+Amounts are stored as SQLite `REAL`.
+
+**Benefits**
+
+* Simpler implementation
+* Suitable for local personal tracking
+
+**Tradeoff**
+
+* Production financial systems should use fixed-point precision (`Decimal` or integer minor units).
+
+---
+
+### Wildcard CORS Configuration
+
+```python
+allow_origins=["*"]
+```
+
+Used to support opening the frontend directly from the local filesystem.
+
+**Tradeoff**
+
+* Suitable for local development only
+* Production deployments should restrict origins
+
+---
+
+## ❌ Out of Scope
+
+The following items were intentionally excluded to prioritize the required functionality within the assessment time limit:
+
+* Authentication
+* Multi-user support
+* Deployment
+* Currency conversion
+* Pagination
+* Reporting exports
+* Automated test suite
+
+---
+
+## 🔮 Future Improvements
+
+* User authentication
+* Multi-user support
+* CSV/Excel export
+* Charts and analytics
+* Configurable currencies
+* Dark mode
+* Automated test coverage
+* Docker support
+* Pagination for large datasets
+
+---
+
+## 🎯 Assessment Goals Covered
+
+* ✅ Add expenses
+* ✅ View expenses
+* ✅ Edit expenses
+* ✅ Delete expenses
+* ✅ Monthly summary
+* ✅ Category breakdown
+* ✅ Filtering
+* ✅ Input validation
+* ✅ Error handling
+* ✅ Clean API design
+* ✅ Local execution
+
+---
+
+## License
+
+This project was created as part of a software engineering practical assessment and is intended for demonstration and evaluation purposes.
